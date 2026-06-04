@@ -64,6 +64,39 @@
 * **QLoRA 기반 가중치 파인튜닝 ([colab_finetune_script.py](file:///c:/CookAndroid/Project/DotNote/colab_finetune_script.py))**: Google의 경량화 언어 모델인 `Gemma-2-2b-it` 모델을 베이스로 선정하고, Unsloth 및 PEFT 라이브러리를 사용해 QLoRA (4-bit 양자화 파인튜닝) 기법으로 특정 지시어 형태(Instruction-Following Prompt)에 특화되도록 가중치를 갱신 및 학습했습니다.
 * **모바일 실행 모델 컴파일 변환 ([convert.py](file:///c:/CookAndroid/Project/DotNote/convert.py))**: 파인튜닝 완료 후 병합된 모델 가중치 파일들을 스마트폰 등 온디바이스 환경에서 초고속 추론(CPU/GPU 최적 가속)이 가능하도록 MediaPipe `llm_bundler` 변환 엔진을 구동하여 8-bit 양자화가 내장된 단일 바이너리 모델 파일(`gemma-2-2b-it.task`, 약 2.4GB)로 컴파일 최적화했습니다.
 
+### 6) 데이터베이스 관계 설계 (ERD)
+앱 내부 로컬 SQLite DB(Room) 구조는 메모 노드와 태그, 그리고 메모 간 시맨틱 연결 컴포넌트(마인드맵 엣지)를 정밀하게 구성하도록 아래와 같이 N:M 다대다 매핑 및 순환 참조 릴레이션 구조로 설계되었습니다.
+
+```mermaid
+erDiagram
+    memos {
+        Long id PK
+        String content
+        Long createdAt
+        Long modifiedAt
+        Double latitude
+        Double longitude
+    }
+    tags {
+        Long id PK
+        String name
+    }
+    memo_tag_cross_ref {
+        Long memoId FK
+        Long tagId FK
+    }
+    memo_relations {
+        Long parentId FK
+        Long childId FK
+        String relationType
+    }
+
+    memos ||--o{ memo_tag_cross_ref : "N:M Mapping"
+    tags ||--o{ memo_tag_cross_ref : "N:M Mapping"
+    memos ||--o{ memo_relations : "Self-Referencing Parent"
+    memos ||--o{ memo_relations : "Self-Referencing Child"
+```
+
 ---
 
 ## 📐 3. 시스템 아키텍처 및 적용 기술 스택
@@ -133,3 +166,18 @@ graph TD
    * Gemma 모델 로딩 시 순간 최대 메모리 확보 요구로 인한 크래시를 방지하기 위해 [AndroidManifest.xml](file:///c:/CookAndroid/Project/DotNote/app/src/main/AndroidManifest.xml)에 `android:largeHeap="true"` 속성을 구성했습니다.
 2. **에뮬레이터 아키텍처 JNI 예외 우회**:
    * 로컬 AI 모델 JNI 라이브러리가 에뮬레이터 CPU 아키텍처 환경과 충돌하여 강제 종료를 발생시키는 현상을 방지하도록 `MainActivity` 비동기 로더 내 예외 처리 범위(`Throwable`)를 극대화하여 예외가 뜨더라도 크래시 없이 즉각 클라우드 제미나이 엔진으로 원활히 복구 전환됩니다.
+
+---
+
+## 🎬 6. 시연 스크린샷 및 시연 비디오
+
+교수님(평가자)의 빠른 동작 검증을 돕기 위해 구현 완료된 UI 스크린샷 및 동작 궤적 시연 자료를 첨부합니다.
+
+| 메인 마인드맵 공간 (Network/Mindmap) | 생각의 지도 (Geofence & Polyline) |
+| :---: | :---: |
+| [시연 스크린샷 등록 예정] | [시연 스크린샷 등록 예정] |
+
+* **작동 설명**: 
+  * 마이크/카메라 캡처 성공 시 백그라운드로 GPS 수집이 완료되며, 생각의 지도로 진입하면 마커 핀들이 작성 좌표의 평균값으로 카메라 줌 핏 연동됩니다.
+  * 마커 핀 클릭 시 이메모와 의미가 통하는 연동 핀들 간의 실시간 Polyline 궤적선이 그려집니다.
+
