@@ -82,7 +82,7 @@ fun MainScreen(
     // ── 마인드맵 그룹 선택 상태 ──
     // null = "전체" 보기(그룹별 클러스터 배치), String = 특정 태그 그룹만 표시
     var selectedMindmapGroup by remember { mutableStateOf<String?>(null) }
-    
+
     val filteredMemosWithTags = remember(memosWithTags, timeRangeStart, timeRangeEnd, searchQuery) {
         var result = memosWithTags
         if (timeRangeStart != null && timeRangeEnd != null) {
@@ -102,6 +102,16 @@ fun MainScreen(
     // State for Quick Input Bar
     var content by remember { mutableStateOf("") }
     val context = LocalContext.current
+
+    // ── 사용자 정의 커스텀 그룹 관리 ──
+    val sharedPrefs = remember(context) { context.getSharedPreferences("dotnote_prefs", android.content.Context.MODE_PRIVATE) }
+    var customGroups by remember { 
+        mutableStateOf(
+            sharedPrefs.getStringSet("custom_groups", emptySet()) ?: emptySet()
+        )
+    }
+    var showAddGroupDialog by remember { mutableStateOf(false) }
+    var newGroupName by remember { mutableStateOf("") }
 
     val locationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     var isLocationEnabled by remember { mutableStateOf(false) }
@@ -326,7 +336,14 @@ fun MainScreen(
                 }
             }
 
-            val label = if (tagFrequency.isNotEmpty()) {
+            // 대표 라벨 결정: 사용자가 명시한 커스텀 그룹 태그가 클러스터에 존재한다면 최우선 적용
+            val matchedCustomGroup = tagFrequency.keys
+                .filter { it in customGroups }
+                .maxByOrNull { tagFrequency[it] ?: 0 }
+
+            val label = if (matchedCustomGroup != null) {
+                matchedCustomGroup
+            } else if (tagFrequency.isNotEmpty()) {
                 tagFrequency.maxByOrNull { it.value }!!.key
             } else {
                 // 태그 없는 고립 메모: 내용 앞부분을 라벨로
@@ -347,9 +364,10 @@ fun MainScreen(
         result
     }
 
-    // 그룹 목록 (칩 UI에 표시할 라벨들) — 멤버 수가 많은 순으로 정렬
-    val availableGroups: List<String> = remember(groupLabels) {
-        groupLabels.entries.sortedByDescending { it.value.size }.map { it.key }
+    // 그룹 목록 (칩 UI에 표시할 라벨들) — 커스텀 그룹을 목록에 항상 반영하여 노출
+    val availableGroups: List<String> = remember(groupLabels, customGroups) {
+        val calculated = groupLabels.entries.sortedByDescending { it.value.size }.map { it.key }
+        (customGroups + calculated).distinct()
     }
 
     // 마인드맵 모드에서 선택된 그룹에 따라 필터링된 노드와 엣지
@@ -358,7 +376,11 @@ fun MainScreen(
             nodes // "전체" 모드이거나 네트워크 모드일 때는 전체 노드 표시
         } else {
             val groupNodeIds = groupLabels[selectedMindmapGroup]?.toSet() ?: emptySet()
-            nodes.filter { it.id in groupNodeIds }
+            // 커스텀 그룹이 비어있거나 클러스터에 존재하지 않는 경우 개별 메모 태그 목록에 해당 그룹명이 있는지 확인
+            val fallbackNodeIds = if (groupNodeIds.isEmpty()) {
+                nodes.filter { selectedMindmapGroup in it.tags }.map { it.id }.toSet()
+            } else groupNodeIds
+            nodes.filter { it.id in fallbackNodeIds }
         }
     }
 
@@ -562,9 +584,16 @@ fun MainScreen(
                         // Send Button
                         IconButton(
                             onClick = {
-                                val memoContent = content
+                                val rawContent = content
                                 content = "" // UI 즉시 초기화하여 반응성 확보
-                                if (memoContent.isBlank()) return@IconButton
+                                if (rawContent.isBlank()) return@IconButton
+
+                                // 마인드맵 특정 그룹 선택 시, 해당 그룹 태그 자동 부여
+                                val memoContent = if (viewMode == ViewMode.MINDMAP && selectedMindmapGroup != null) {
+                                    "$rawContent #$selectedMindmapGroup"
+                                } else {
+                                    rawContent
+                                }
 
                                 val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                                 val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -629,7 +658,58 @@ fun MainScreen(
                             availableGroups = availableGroups,
                             selectedGroup = selectedMindmapGroup,
                             onGroupSelected = { group -> selectedMindmapGroup = group },
-                            groupLabels = if (selectedMindmapGroup == null) groupLabels else null
+                            groupLabels = if (selectedMindmapGroup == null) groupLabels else null,
+                            // 커스텀 그룹 설정
+                            customGroups = customGroups,
+                            onAddGroupClick = { showAddGroupDialog = true },
+                            onRemoveGroupClick = { group ->
+                                val updated = customGroups - group
+                                customGroups = updated
+                                sharedPrefs.edit().putStringSet("custom_groups", updated).apply()
+                            }
+                        )
+                    }
+
+                    // ── 커스텀 그룹 추가 다이얼로그 ──
+                    if (showAddGroupDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showAddGroupDialog = false },
+                            title = { Text("새 그룹 태그 추가") },
+                            text = {
+                                OutlinedTextField(
+                                    value = newGroupName,
+                                    onValueChange = { newGroupName = it },
+                                    label = { Text("그룹 태그 이름") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        val cleanName = newGroupName.trim().replace(Regex("[^가-힣a-zA-Z0-9]"), "")
+                                        if (cleanName.isNotEmpty()) {
+                                            val updated = customGroups + cleanName
+                                            customGroups = updated
+                                            sharedPrefs.edit().putStringSet("custom_groups", updated).apply()
+                                            newGroupName = ""
+                                            showAddGroupDialog = false
+                                        }
+                                    }
+                                ) {
+                                    Text("추가")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = {
+                                        newGroupName = ""
+                                        showAddGroupDialog = false
+                                    }
+                                ) {
+                                    Text("취소")
+                                }
+                            }
                         )
                     }
                     

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -58,7 +59,11 @@ fun GraphCanvas(
     availableGroups: List<String> = emptyList(),
     selectedGroup: String? = null,
     onGroupSelected: (String?) -> Unit = {},
-    groupLabels: Map<String, List<Long>>? = null
+    groupLabels: Map<String, List<Long>>? = null,
+    // ── 커스텀 그룹 태그 추가/삭제 콜백 ──
+    customGroups: Set<String> = emptySet(),
+    onAddGroupClick: () -> Unit = {},
+    onRemoveGroupClick: (String) -> Unit = {}
 ) {
     // 화면 좌표계에서의 변환 상태
     // offset = 화면 픽셀 단위의 이동량, scale = 확대 배율
@@ -87,7 +92,8 @@ fun GraphCanvas(
                 ViewMode.MINDMAP -> mindMapLayoutEngine.calculateLayout(
                     nodes, edges, canvasBounds, null, density,
                     // "전체" 모드일 때만 그룹별 클러스터 배치 사용
-                    groupLabels = if (selectedGroup == null) groupLabels else null
+                    groupLabels = if (selectedGroup == null) groupLabels else null,
+                    selectedGroup = selectedGroup
                 )
             }
             delay(16L)
@@ -413,7 +419,7 @@ fun GraphCanvas(
         }
 
         // ── 마인드맵 모드: 그룹 선택 칩 UI (상단) ──
-        if (viewMode == ViewMode.MINDMAP && availableGroups.isNotEmpty()) {
+        if (viewMode == ViewMode.MINDMAP) {
             Surface(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
                 shadowElevation = 4.dp,
@@ -427,7 +433,8 @@ fun GraphCanvas(
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     // "전체" 칩
                     Surface(
@@ -446,19 +453,60 @@ fun GraphCanvas(
 
                     // 태그별 그룹 칩
                     availableGroups.forEach { group ->
+                        val isCustom = group in customGroups
                         Surface(
                             shape = RoundedCornerShape(50),
                             color = if (selectedGroup == group) primaryColor else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.clickable { onGroupSelected(group) }
                         ) {
-                            Text(
-                                text = "#$group",
-                                color = if (selectedGroup == group) onPrimaryColor else onSurfaceColor,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
+                            ) {
+                                Text(
+                                    text = "#$group",
+                                    color = if (selectedGroup == group) onPrimaryColor else onSurfaceColor,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (isCustom) {
+                                    Spacer(modifier = Modifier.size(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable { 
+                                                onRemoveGroupClick(group)
+                                                if (selectedGroup == group) {
+                                                    onGroupSelected(null)
+                                                }
+                                            }
+                                    ) {
+                                        Text(
+                                            text = "✕",
+                                            color = (if (selectedGroup == group) onPrimaryColor else onSurfaceColor).copy(alpha = 0.7f),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
+                                }
+                            }
                         }
+                    }
+
+                    // "+ 추가" 칩
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.clickable { onAddGroupClick() }
+                    ) {
+                        Text(
+                            text = "+ 그룹 추가",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
                     }
                 }
             }

@@ -3,6 +3,7 @@ package com.cookandroid.dotnote.data.repository
 import android.util.Log
 import com.cookandroid.dotnote.domain.repository.GeminiRepository
 import com.cookandroid.dotnote.domain.repository.SlmRepository
+import com.cookandroid.dotnote.util.TagCleaner
 import com.google.gson.Gson
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.Dispatchers
@@ -50,19 +51,12 @@ class SlmRepositoryImpl(
                 }
 
                 val parsedResult = gson.fromJson(cleanedJson, SlmRepository.SlmAnalysisResult::class.java)
-                val rawTags = parsedResult?.tags?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() } ?: emptyList()
+                val rawTags = parsedResult?.tags?.map { TagCleaner.cleanTag(it) }?.filter { it.length >= 2 && it !in TagCleaner.STOP_WORDS } ?: emptyList()
 
                 // 하이브리드 보정: 태그 개수가 7개 미만일 때 본문에서 명사성 단어를 추출하여 채움
-                val stopWords = setOf("그리고", "하지만", "그래서", "때문에", "오늘", "내일", "어제", "정말", "매우", "너무", "아주", "있다", "없다", "하다", "되다", "이다")
                 val finalTags = if (rawTags.size < 7) {
-                    val additionalTags = content
-                        .replace(Regex("[^가-힣a-zA-Z0-9\\s]"), " ")
-                        .split("\\s+".toRegex())
-                        .map { it.replace(Regex("(은|는|이|가|을|를|도|에|에서|부터|까지|의|로|으로)$"), "").trim().lowercase() }
-                        .filter { it.length >= 2 && it !in stopWords && it !in rawTags }
-                        .distinct()
-                    
-                    (rawTags + additionalTags).take(7)
+                    val additionalTags = TagCleaner.extractValidTags(content, rawTags)
+                    (rawTags + additionalTags).distinct().take(7)
                 } else {
                     rawTags
                 }

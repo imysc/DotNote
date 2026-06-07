@@ -43,7 +43,8 @@ class MindMapLayoutEngine {
         bounds: Pair<Float, Float>,
         rootId: Long?,
         density: Float = 1f,
-        groupLabels: Map<String, List<Long>>? = null
+        groupLabels: Map<String, List<Long>>? = null,
+        selectedGroup: String? = null
     ) {
         if (nodes.isEmpty()) {
             isStable = true
@@ -63,7 +64,7 @@ class MindMapLayoutEngine {
             calculateMultiClusterLayout(nodes, edges, width, height, density, groupLabels)
         } else {
             // ── 단일 트리 모드: 전체 노드를 하나의 방사형 트리로 배치 ──
-            calculateSingleTreeLayout(nodes, edges, width, height, density, rootId)
+            calculateSingleTreeLayout(nodes, edges, width, height, density, rootId, selectedGroup)
         }
 
         // 현재 위치에서 목표 위치로 스프링 보간 이동
@@ -108,14 +109,21 @@ class MindMapLayoutEngine {
         width: Float,
         height: Float,
         density: Float,
-        rootId: Long?
+        rootId: Long?,
+        selectedGroup: String?
     ): Map<Long, Offset> {
         val nodeMap = nodes.associateBy { it.id }
 
-        // 루트 노드 선택: 지정값 → 연결 수 최다 → 첫 번째 노드
-        val actualRootId = rootId ?: nodes.maxByOrNull { node ->
-            edges.count { it.sourceId == node.id || it.targetId == node.id }
-        }?.id ?: nodes.first().id
+        // 루트 노드 선택: 지정값 -> 그룹명 관련 태그를 직접 가진 노드 -> 연결 수 최다 -> 첫 번째 노드
+        val actualRootId = rootId 
+            ?: (if (selectedGroup != null) {
+                nodes.filter { selectedGroup in it.tags }
+                    .maxByOrNull { node -> edges.count { it.sourceId == node.id || it.targetId == node.id } }?.id
+            } else null)
+            ?: nodes.maxByOrNull { node ->
+                edges.count { it.sourceId == node.id || it.targetId == node.id }
+            }?.id 
+            ?: nodes.first().id
 
         // 무방향 인접 리스트
         val adjacency = buildAdjacency(edges)
@@ -237,7 +245,7 @@ class MindMapLayoutEngine {
         val cellWidth = width / cols
         val cellHeight = height / rows
 
-        groups.forEachIndexed { index, (_, nodeIds) ->
+        groups.forEachIndexed { index, (groupName, nodeIds) ->
             val col = index % cols
             val row = index / cols
 
@@ -252,14 +260,17 @@ class MindMapLayoutEngine {
 
             if (groupNodes.isEmpty()) return@forEachIndexed
 
-            // 그룹 내 루트: 연결이 가장 많은 노드
-            val groupRootId = groupNodes.maxByOrNull { node ->
-                groupEdges.count { it.sourceId == node.id || it.targetId == node.id }
-            }?.id ?: groupNodes.first().id
+            // 그룹 내 루트 노드 선택: 그룹 이름(태그명)을 포함하고 있는 노드들 중 연결선이 가장 많은 노드 최우선 지정
+            val groupRootId = groupNodes.filter { groupName in it.tags }
+                .maxByOrNull { node -> groupEdges.count { it.sourceId == node.id || it.targetId == node.id } }?.id
+                ?: groupNodes.maxByOrNull { node ->
+                    groupEdges.count { it.sourceId == node.id || it.targetId == node.id }
+                }?.id 
+                ?: groupNodes.first().id
 
-            // 그룹별 섹터 레이아웃 계산 (셀 크기 기반)
+            // 그룹별 섹터 레이아웃 계산 (셀 크기 기반) - 그룹명을 파라미터로 전달
             val groupPositions = calculateSingleTreeLayout(
-                groupNodes, groupEdges, cellWidth, cellHeight, density * 0.6f, groupRootId
+                groupNodes, groupEdges, cellWidth, cellHeight, density * 0.6f, groupRootId, groupName
             )
 
             // 셀 좌표계로 변환 (원점을 셀 중심으로 이동)

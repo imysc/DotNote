@@ -2,6 +2,7 @@ package com.cookandroid.dotnote.data.repository
 
 import android.util.Log
 import com.cookandroid.dotnote.domain.repository.GeminiRepository
+import com.cookandroid.dotnote.util.TagCleaner
 import com.google.ai.client.generativeai.GenerativeModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,10 +38,8 @@ class GeminiRepositoryImpl(
 
             val tags = resultText
                 .split(",")
-                .map { it.trim().lowercase() }  // 소문자 및 공백 제거
-                // 혹시 남아있을지 모르는 흔한 조사들 강제 제거
-                .map { it.replace(Regex("(은|는|이|가|을|를|도|에|에서|의|로|으로)$"), "") }
-                .filter { it.isNotEmpty() && it.length <= 10 }  // 비정상적으로 긴 응답 필터링
+                .map { TagCleaner.cleanTag(it) }  // TagCleaner로 일관된 조사 제거 및 정제 수행
+                .filter { it.length >= 2 && it.length <= 10 && it !in TagCleaner.STOP_WORDS }  // 유효한 길이 및 불용어 필터링
 
             Log.d("GeminiTags", "Input: ${content.take(30)}... → Tags: $tags")
             tags
@@ -56,16 +55,8 @@ class GeminiRepositoryImpl(
      * Gemini API 실패 시 폴백: 입력 텍스트에서 긴 단어를 추출하여 태그로 사용
      */
     private fun generateFallbackTags(content: String): List<String> {
-        val stopWords = setOf("그리고", "하지만", "그래서", "때문에", "오늘", "내일", "어제", "정말", "매우", "너무", "아주", "있다", "없다", "하다", "되다", "이다")
-        
-        return content
-            .replace(Regex("[^가-힣a-zA-Z0-9\\s]"), " ")
-            .split("\\s+".toRegex())
-            .map { it.replace(Regex("(은|는|이|가|을|를|도|에|에서|부터|까지|의|로|으로)$"), "") } // 폴백에서도 조사 제거
-            .filter { it.length >= 2 && it !in stopWords }
-            .distinct()
-            .take(7)
-            .map { it.lowercase() }
-            .also { Log.d("GeminiTags", "Fallback tags: $it") }
+        val fallbackTags = TagCleaner.extractValidTags(content).take(7)
+        Log.d("GeminiTags", "Fallback tags: $fallbackTags")
+        return fallbackTags
     }
 }
