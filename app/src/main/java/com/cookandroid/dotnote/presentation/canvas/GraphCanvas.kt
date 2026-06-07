@@ -55,6 +55,7 @@ fun GraphCanvas(
     viewMode: ViewMode = ViewMode.NETWORK,
     selectedNodeId: Long? = null,
     onNodeClick: (Long) -> Unit,
+    onNodeLongClick: (Long) -> Unit = {},
     // ── 마인드맵 그룹핑 관련 파라미터 ──
     availableGroups: List<String> = emptyList(),
     selectedGroup: String? = null,
@@ -146,24 +147,42 @@ fun GraphCanvas(
                         scale = newScale
                     }
                 }
-                // 탭 제스처 (노드 클릭)
+                // 탭 및 롱 클릭 제스처
                 .pointerInput(nodes, scale, offset) {
-                    detectTapGestures { tapScreenPos ->
-                        val worldPos = Offset(
-                            (tapScreenPos.x - offset.x) / scale,
-                            (tapScreenPos.y - offset.y) / scale
-                        )
+                    detectTapGestures(
+                        onTap = { tapScreenPos ->
+                            val worldPos = Offset(
+                                (tapScreenPos.x - offset.x) / scale,
+                                (tapScreenPos.y - offset.y) / scale
+                            )
 
-                        // 히트 영역을 넉넉하게 잡아 터치 정확도를 높임
-                        val hitPadding = 20f
-                        val clickedNode = nodes.find { node ->
-                            abs(node.position.x - worldPos.x) <= (baseNodeWidth / 2 + hitPadding) &&
-                            abs(node.position.y - worldPos.y) <= (baseNodeHeight / 2 + hitPadding)
+                            // 히트 영역을 넉넉하게 잡아 터치 정확도를 높임
+                            val hitPadding = 20f
+                            val clickedNode = nodes.find { node ->
+                                abs(node.position.x - worldPos.x) <= (baseNodeWidth / 2 + hitPadding) &&
+                                abs(node.position.y - worldPos.y) <= (baseNodeHeight / 2 + hitPadding)
+                            }
+                            if (clickedNode != null) {
+                                onNodeClick(clickedNode.id)
+                            } else {
+                                onNodeClick(-1L) // 빈 바탕 클릭 시 선택 취소
+                            }
+                        },
+                        onLongPress = { tapScreenPos ->
+                            val worldPos = Offset(
+                                (tapScreenPos.x - offset.x) / scale,
+                                (tapScreenPos.y - offset.y) / scale
+                            )
+                            val hitPadding = 20f
+                            val clickedNode = nodes.find { node ->
+                                abs(node.position.x - worldPos.x) <= (baseNodeWidth / 2 + hitPadding) &&
+                                abs(node.position.y - worldPos.y) <= (baseNodeHeight / 2 + hitPadding)
+                            }
+                            if (clickedNode != null) {
+                                onNodeLongClick(clickedNode.id)
+                            }
                         }
-                        if (clickedNode != null) {
-                            onNodeClick(clickedNode.id)
-                        }
-                    }
+                    )
                 }
         ) {
             canvasBounds = Pair(size.width, size.height)
@@ -196,6 +215,13 @@ fun GraphCanvas(
                 scale(scale, scale, pivot = Offset.Zero)
             }) {
 
+                // 선택된 노드가 있을 경우 그 노드와 연결된 다른 노드의 ID 수집
+                val connectedNodeIds = if (selectedNodeId == null) emptySet<Long>() else {
+                    edges.filter { it.sourceId == selectedNodeId || it.targetId == selectedNodeId }
+                        .flatMap { listOf(it.sourceId, it.targetId) }
+                        .toSet()
+                }
+
                 // ── 간선(Edge) 그리기 ──
                 // 마인드맵 모드에서는 BFS 스패닝 트리 엣지만 그려서 깨끗한 트리 형태 유지
                 val currentTreeEdges = mindMapLayoutEngine.treeEdges
@@ -223,8 +249,9 @@ fun GraphCanvas(
                                 tgt.position.y
                             )
                         }
-                        val edgeAlpha = if (edge.isActive) 0.65f else 0.1f
-                        val circleAlpha = if (edge.isActive) 0.5f else 0.08f
+                        val isEdgeHighlighted = selectedNodeId == null || edge.sourceId == selectedNodeId || edge.targetId == selectedNodeId
+                        val edgeAlpha = if (isEdgeHighlighted) (if (edge.isActive) 0.65f else 0.1f) else 0.03f
+                        val circleAlpha = if (isEdgeHighlighted) (if (edge.isActive) 0.5f else 0.08f) else 0.02f
 
                         drawPath(
                             path = path,
@@ -261,7 +288,8 @@ fun GraphCanvas(
                             )
                         )
                     }
-                    val nodeAlpha = if (node.isActive) 1f else 0.2f
+                    val isNodeHighlighted = selectedNodeId == null || node.id == selectedNodeId || node.id in connectedNodeIds
+                    val nodeAlpha = if (isNodeHighlighted) (if (node.isActive) 1f else 0.2f) else 0.08f
                     
                     // 부드러운 종이 위 그림자
                     val shadowBaseAlpha = if (isSelected) 0.2f else 0.08f

@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,7 +57,7 @@ private fun normalizeText(text: String): String {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     viewModel: MemoViewModel,
@@ -71,6 +73,7 @@ fun MainScreen(
     var viewMode by remember { mutableStateOf(ViewMode.NETWORK) }
     var isGraphView by remember { mutableStateOf(true) }
     var selectedMemoId by remember { mutableStateOf<Long?>(null) }
+    var detailMemoId by remember { mutableStateOf<Long?>(null) }
     
     var timeRangeStart by remember { mutableStateOf<Long?>(null) }
     var timeRangeEnd by remember { mutableStateOf<Long?>(null) }
@@ -653,7 +656,16 @@ fun MainScreen(
                             edges = displayEdges,
                             viewMode = viewMode,
                             selectedNodeId = selectedMemoId,
-                            onNodeClick = { id -> selectedMemoId = id },
+                            onNodeClick = { id -> 
+                                if (id == -1L) {
+                                    selectedMemoId = null
+                                } else {
+                                    selectedMemoId = id
+                                }
+                            },
+                            onNodeLongClick = { id ->
+                                detailMemoId = id
+                            },
                             // 마인드맵 그룹핑 파라미터
                             availableGroups = availableGroups,
                             selectedGroup = selectedMindmapGroup,
@@ -742,8 +754,12 @@ fun MainScreen(
                     items(filteredMemosWithTags.map { it.memo }) { memo ->
                         val isNew = (System.currentTimeMillis() - memo.createdAt) < 5 * 60 * 1000L
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { selectedMemoId = memo.id }
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = { selectedMemoId = memo.id },
+                                    onLongClick = { detailMemoId = memo.id }
+                                )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(
@@ -781,7 +797,7 @@ fun MainScreen(
     }
 
     // Detail Bottom Sheet
-    selectedMemoId?.let { id ->
+    detailMemoId?.let { id ->
         val selectedMemoWithTags = memosWithTags.find { it.memo.id == id }
         if (selectedMemoWithTags != null) {
             val selectedMemo = selectedMemoWithTags.memo
@@ -800,7 +816,7 @@ fun MainScreen(
                 memoId = selectedMemo.id,
                 content = selectedMemo.content,
                 createdAt = selectedMemo.createdAt,
-                onClose = { selectedMemoId = null },
+                onClose = { detailMemoId = null },
                 onUpdate = { memoId, newContent, newTags ->
                     viewModel.updateMemo(
                         memoId = memoId,
@@ -812,7 +828,7 @@ fun MainScreen(
                 },
                 onDelete = { memoId ->
                     viewModel.deleteMemo(memoId)
-                    selectedMemoId = null
+                    detailMemoId = null
                 },
                 tags = tags,
                 relatedMemos = relatedMemosList
