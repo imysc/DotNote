@@ -22,8 +22,20 @@ fun TimelineSlider(
     memos: List<MemoEntity> = emptyList(),
     onTimeRangeChanged: (Long, Long) -> Unit
 ) {
-    var sliderPosition by remember { mutableStateOf(minTime.toFloat()..maxTime.toFloat()) }
+    // 0 나누기 방지 및 정밀도 유지를 위해 최소 1초의 시간 간격 확보
+    val timeRange = remember(minTime, maxTime) { (maxTime - minTime).coerceAtLeast(1000L) }
+    
+    // minTime, maxTime 갱신 시 슬라이더 상태를 0f..1f로 재설정하고 remember 키로 동기화
+    var sliderPosition by remember(minTime, maxTime) { mutableStateOf(0f..1f) }
     val formatter = remember { SimpleDateFormat("MM.dd", Locale.getDefault()) }
+
+    // 슬라이더 비율 값으로부터 실제 타임스탬프 역산
+    val startTimestamp = remember(sliderPosition.start, minTime, timeRange) {
+        minTime + (sliderPosition.start * timeRange).toLong()
+    }
+    val endTimestamp = remember(sliderPosition.endInclusive, minTime, timeRange) {
+        minTime + (sliderPosition.endInclusive * timeRange).toLong()
+    }
 
     // Surface for glassmorphism effect
     Surface(
@@ -41,12 +53,12 @@ fun TimelineSlider(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = formatter.format(Date(sliderPosition.start.toLong())),
+                    text = formatter.format(Date(startTimestamp)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = formatter.format(Date(sliderPosition.endInclusive.toLong())),
+                    text = formatter.format(Date(endTimestamp)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -68,14 +80,13 @@ fun TimelineSlider(
                     
                     // Draw density bars
                     if (memos.isNotEmpty() && maxTime > minTime) {
-                        val timeRange = maxTime - minTime
                         val bucketCount = 40
                         val buckets = IntArray(bucketCount)
                         
                         memos.forEach { memo ->
                             val t = memo.createdAt.coerceIn(minTime, maxTime)
                             val ratio = (t - minTime).toFloat() / timeRange.toFloat()
-                            val idx = (ratio * (bucketCount - 1)).toInt()
+                            val idx = (ratio * (bucketCount - 1)).toInt().coerceIn(0, bucketCount - 1)
                             buckets[idx]++
                         }
                         
@@ -104,9 +115,11 @@ fun TimelineSlider(
                     value = sliderPosition,
                     onValueChange = { range ->
                         sliderPosition = range
-                        onTimeRangeChanged(range.start.toLong(), range.endInclusive.toLong())
+                        val start = minTime + (range.start * timeRange).toLong()
+                        val end = minTime + (range.endInclusive * timeRange).toLong()
+                        onTimeRangeChanged(start, end)
                     },
-                    valueRange = minTime.toFloat()..maxTime.toFloat(),
+                    valueRange = 0f..1f,
                     modifier = Modifier.fillMaxWidth(),
                     colors = SliderDefaults.colors(
                         activeTrackColor = androidx.compose.ui.graphics.Color.Transparent,
