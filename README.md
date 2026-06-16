@@ -98,18 +98,18 @@
 #### (3) QLoRA 초경량 파인튜닝 스펙 ([colab_finetune_script.py](file:///c:/CookAndroid/Project/DotNote/colab_finetune_script.py))
 Google Colab T4 GPU 환경에서 단시간 내 안정적인 수렴을 달성하도록 설계된 파인튜닝 스펙은 다음과 같습니다.
 
-| 하이퍼파라미터 (Hyperparameter) | 설정 값 (Value) | 상세 비고 (Note) |
-| :--- | :--- | :--- |
-| **Base Model** | `google/gemma-2-2b-it` | 허깅페이스 공식 배포 버전 |
-| **Quantization** | NF4 (4-bit Double Quantization) | BitsAndBytes 활용으로 T4 VRAM 내 구동 가능 |
-| **Compute Dtype** | `torch.float16` | 연산 오버플로우 방지 및 안정적인 텐서 연산 |
-| **LoRA Rank ($r$)** | `8` | 어댑터 가중치 밀도 제어 및 오버피팅 억제 |
-| **LoRA Alpha ($\alpha$)** | `16` | LoRA 학습 가중치 스케일링 팩터 |
-| **LoRA Target Modules** | `q_proj`, `k_proj`, `v_proj`, `o_proj`<br>`gate_proj`, `up_proj`, `down_proj` | 전체 어텐션 및 피드포워드 레이어 전부에 LoRA 어댑터 주입 |
-| **Epochs** | `3` | 전체 데이터셋 총 3회 완전 에포크 학습 |
-| **Learning Rate** | `2e-4` | AdamW 최적화 학습률 |
-| **LR Scheduler Type** | `constant` | 학습률 조기 감쇠에 의한 과소적합 방지 |
-| **Optimizer** | `paged_adamw_32bit` | VRAM 부족 시 디스크 스와핑 지원용 옵티마이저 |
+| 하이퍼파라미터 (Hyperparameter) | 설정 값 (Value)                                                               | 상세 비고 (Note)                                         |
+| :------------------------------ | :---------------------------------------------------------------------------- | :------------------------------------------------------- |
+| **Base Model**                  | `google/gemma-2-2b-it`                                                        | 허깅페이스 공식 배포 버전                                |
+| **Quantization**                | NF4 (4-bit Double Quantization)                                               | BitsAndBytes 활용으로 T4 VRAM 내 구동 가능               |
+| **Compute Dtype**               | `torch.float16`                                                               | 연산 오버플로우 방지 및 안정적인 텐서 연산               |
+| **LoRA Rank ($r$)**             | `8`                                                                           | 어댑터 가중치 밀도 제어 및 오버피팅 억제                 |
+| **LoRA Alpha ($\alpha$)**       | `16`                                                                          | LoRA 학습 가중치 스케일링 팩터                           |
+| **LoRA Target Modules**         | `q_proj`, `k_proj`, `v_proj`, `o_proj`<br>`gate_proj`, `up_proj`, `down_proj` | 전체 어텐션 및 피드포워드 레이어 전부에 LoRA 어댑터 주입 |
+| **Epochs**                      | `3`                                                                           | 전체 데이터셋 총 3회 완전 에포크 학습                    |
+| **Learning Rate**               | `2e-4`                                                                        | AdamW 최적화 학습률                                      |
+| **LR Scheduler Type**           | `constant`                                                                    | 학습률 조기 감쇠에 의한 과소적합 방지                    |
+| **Optimizer**                   | `paged_adamw_32bit`                                                           | VRAM 부족 시 디스크 스와핑 지원용 옵티마이저             |
 
 #### (4) 모바일 기기 최적화 및 8-bit 양자화 컴파일 ([convert.py](file:///c:/CookAndroid/Project/DotNote/convert.py))
 안드로이드 기기 상에서 MediaPipe Tasks GenAI SDK로 로드 및 실행을 하기 위해 컴파일을 거쳤습니다.
@@ -248,8 +248,7 @@ graph TD
 
 ---
 
-## 🎥 8. 최종 발표 시연 영상
-* 👉 **[DotNote 최종 시연 영상 (YouTube)](https://youtu.be/mihCo8yIRpU)**
+
 
 
 
