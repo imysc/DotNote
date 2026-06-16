@@ -38,6 +38,12 @@
 * **스크롤 최적화 리스트뷰 (LazyColumn List View)**
   - 상단 전환 버튼을 클릭하여 네트워크/마인드맵 화면에서 리스트뷰로 전환할 수 있습니다.
   - Jetpack Compose의 `LazyColumn`을 도입하여 화면에 표시되는 8~10개의 카드만 실시간 렌더링하므로, 수천 개의 메모가 누적되어도 CPU 및 VRAM 사용량을 극도로 낮게 유지합니다.
+* **줌 레벨 기반 적응형 카드 정보 표출 (Adaptive Level of Detail)**
+  - 캔버스의 핀치 줌(Pinch-to-zoom) 레벨에 따라 노드 카드가 동적으로 반응합니다. 축소 시에는 노드와 관계선 중심의 거시적 흐름을 보여주고, 확대 시에는 텍스트의 노출 길이를 늘려 세부 정보와 태그까지 선명하게 노출하는 반응형 LOD 기법을 적용했습니다.
+* **터치 정확도 보정을 위한 히트 패딩 (Hit Box Padding)**
+  - 노드가 밀집된 2D 캔버스 영역 내에서 조작 피로도를 낮추고 오터치를 방지하기 위해, 각 노드의 바운딩 박스 주변에 `20f` 상당의 가상 히트 패딩을 지정하여 터치 판정 신뢰성을 극대화했습니다.
+* **사용자 정의 마인드맵 그룹핑 칩 UI (Custom Group Filter Chip)**
+  - AI가 자동 추출한 연관 태그 외에 사용자가 직접 생성한 그룹을 상단 수평 스크롤 칩(Chip) UI로 나열합니다. 특정 칩을 선택하는 것만으로 해당 범주에 속하는 미니 마인드맵만 격리 필터링하여 시각적 혼선을 예방합니다.
 
 ---
 
@@ -209,7 +215,35 @@ graph TD
 
 ---
 
-## 📲 6. 온디바이스 구동 가이드 및 디바이스 환경 배포
+## 📂 6. 디렉토리 구조 및 패키지 아키텍처
+
+본 프로젝트는 유지보수성과 확장성을 극대화하기 위해 **Clean Architecture** 철학 및 **MVVM 패턴**을 기반으로 계층화하여 패키지를 분할 설계하였습니다.
+
+```text
+com.cookandroid.dotnote/
+├── data/                       # 데이터 계층 (Data Layer)
+│   ├── local/                  # Room DB 로컬 저장소 (Entity, DAO, Database)
+│   ├── remote/                 # Gemini API Cloud Fallback 연동 및 SDK 처리
+│   └── repository/             # Domain 리포지토리 인터페이스 실체 구현부
+├── domain/                     # 도메인 비즈니스 계층 (Domain Layer)
+│   ├── location/               # GPS 위도/경도 획득 추상 인터페이스
+│   └── repository/             # 리포지토리 인터페이스 정의 (추상화)
+├── presentation/               # 표현 계층 (Presentation Layer - UI)
+│   ├── canvas/                 # Force-Directed & Radial-Tree 마인드맵 화면 (Compose Canvas)
+│   ├── map/                    # Google Maps 연동 생각의 지도 시각화 화면
+│   └── memo/                   # 메인 퀵 캡처, 타임라인, 리스트뷰 화면 및 MemoViewModel
+├── ui/                         # 테마 설정 및 Material 3 스타일 리소스 정의
+├── util/                       # 한국어 조사/불용어 필터링 유틸리티 (TagCleaner.kt)
+└── MainActivity.kt             # 앱 메인 진입점 및 코루틴 기반 비동기 로딩 스캐폴딩
+```
+
+* **Data Layer (데이터 계층)**: SQLite DB(Room)와 클라우드 백업 API(Gemini SDK)의 실체적 입출력과 디렉토리 파일 적재 프로세스를 격리 수행합니다.
+* **Domain Layer (도메인 계층)**: 비즈니스 핵심 규칙을 품고 있으며, 플랫폼 종속적인 UI 및 데이터 프레임워크와 직접 결합하지 않도록 인터페이스 추상화를 구축합니다.
+* **Presentation Layer (표현 계층)**: Jetpack Compose 기반의 선언형 UI를 담당하며, `ViewModel`을 통해 데이터 단방향 흐름(UDF) 구조로 화면 상태를 구독 및 갱신합니다.
+
+---
+
+## 📲 7. 온디바이스 구동 가이드 및 디바이스 환경 배포
 
 ### 1단계: 온디바이스 SLM 모델 및 파인튜닝 원본 가중치 확보
 본 모델 데이터들은 기가바이트(GB) 단위의 대용량 파일이므로 깃허브 소스코드 업로드 대상에서 제외되어 있습니다. 아래 구글 드라이브 공유 링크에서 다운로드해 주십시오.
@@ -239,7 +273,7 @@ graph TD
 
 ---
 
-## 🛠️ 7. 트러블슈팅 및 비상 대책 구현
+## 🛠️ 8. 트러블슈팅 및 비상 대책 구현
 
 1. **대용량 모델 로드 시 아웃 오브 메모리(OOM) 방어**:
    * Gemma 모델 로딩 시 순간 최대 메모리 확보 요구로 인한 크래시를 방지하기 위해 [AndroidManifest.xml](file:///c:/CookAndroid/Project/DotNote/app/src/main/AndroidManifest.xml)에 `android:largeHeap="true"` 속성을 구성했습니다.
